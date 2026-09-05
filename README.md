@@ -75,9 +75,12 @@ export NODE_AUTH_TOKEN=<a classic PAT with read:packages>
 pnpm install
 ```
 
-CI reads the same token from the `PACKAGES_READ_TOKEN` repository secret — the
-default `GITHUB_TOKEN` only grants same-repo package access, and these packages are
-published from `osiris-ai`, a different repo under the same account.
+CI reads the same token from the `PACKAGES_READ_TOKEN` repository secret. This
+is required even though both repos and packages are public: GitHub Packages'
+npm registry always requires authentication (unlike ghcr.io, which allows
+anonymous pulls of public images), and the automatic `GITHUB_TOKEN` can only
+read packages published from the *same* repository — it 403s cross-repo
+regardless of visibility. A PAT is the only thing that works across repos.
 
 ## Prerequisites
 
