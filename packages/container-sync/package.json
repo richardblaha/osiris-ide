@@ -30,8 +30,8 @@
   },
   "dependencies": {
     "@devcontainers/cli": "^0.80.0",
-    "@richardblaha/protocol": "workspace:*",
-    "@richardblaha/shared-core": "workspace:*",
+    "@richardblaha/protocol": "^0.1.0",
+    "@richardblaha/shared-core": "^0.1.0",
     "execa": "^9.5.0"
   },
   "devDependencies": {

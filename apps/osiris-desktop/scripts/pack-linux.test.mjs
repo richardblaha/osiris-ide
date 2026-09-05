@@ -2,9 +2,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   APP_PREFIX,
+  DOCKER_DEB_ALTERNATIVES,
+  DOCKER_RPM_ALTERNATIVES,
   appRunScript,
+  debControl,
+  debPostinst,
   desktopEntry,
   envScrubPreamble,
+  rpmPost,
+  rpmSpec,
   snapLauncher,
   snapMeta,
 } from './pack-linux.mjs';
@@ -62,4 +68,51 @@ test('appRunScript and snapLauncher both scrub inherited env before exec', () =>
     assert.match(script, /unset ELECTRON_RUN_AS_NODE/);
   }
   assert.match(snapLauncher(), new RegExp(`\\$SNAP/${APP_PREFIX}/bin/osiris`));
+});
+
+test('debControl declares the release version, architecture and a Docker alternation', () => {
+  const control = debControl({ version: '1.94.2.24286' });
+  assert.match(control, /^Package: osiris$/m);
+  assert.match(control, /^Version: 1\.94\.2\.24286$/m);
+  assert.match(control, /^Architecture: amd64$/m);
+  const depends = control.match(/^Depends: (.+)$/m)?.[1];
+  assert.ok(depends, 'control file must declare Depends');
+  assert.ok(depends.includes(DOCKER_DEB_ALTERNATIVES.join(' | ')), 'must alternate over Docker/Podman');
+  assert.match(depends, /libgtk-3-0/);
+  assert.match(depends, /libnss3/);
+});
+
+test('debControl honours a custom architecture', () => {
+  assert.match(debControl({ version: '1.0.0', arch: 'arm64' }), /^Architecture: arm64$/m);
+});
+
+test('rpmSpec declares Requires for Docker alternatives and runtime libs, and never fails on missing build-id', () => {
+  const spec = rpmSpec({ version: '1.94.2.24286' });
+  assert.match(spec, /^Name: osiris$/m);
+  assert.match(spec, /^Version: 1\.94\.2\.24286$/m);
+  assert.match(spec, /^BuildArch: x86_64$/m);
+  assert.match(spec, /^%global _missing_build_ids_terminate_build 0$/m);
+  assert.match(spec, new RegExp(`^Requires: \\(${DOCKER_RPM_ALTERNATIVES.join(' or ')}\\)$`, 'm'));
+  assert.match(spec, /^Requires: gtk3$/m);
+  assert.match(spec, /^%files$/m);
+  assert.match(spec, /^\/usr\/bin\/osiris$/m);
+});
+
+test('rpmSpec honours a custom release and architecture', () => {
+  const spec = rpmSpec({ version: '1.0.0', release: '2', arch: 'aarch64' });
+  assert.match(spec, /^Release: 2$/m);
+  assert.match(spec, /^BuildArch: aarch64$/m);
+});
+
+test('debPostinst and rpmPost both fix up chrome-sandbox permissions under the shared prefix', () => {
+  for (const script of [debPostinst(), rpmPost()]) {
+    assert.match(script, new RegExp(`chmod 4755 /${APP_PREFIX}/chrome-sandbox`.replace(/\//g, '\\/')));
+  }
+  assert.ok(debPostinst().startsWith('#!/bin/sh\n'));
+});
+
+test('rpmSpec wires rpmPost into its %post section', () => {
+  const spec = rpmSpec({ version: '1.0.0' });
+  assert.match(spec, /^%post$/m);
+  assert.match(spec, /chmod 4755 \/usr\/share\/osiris\/chrome-sandbox/);
 });

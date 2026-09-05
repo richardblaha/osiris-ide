@@ -14,6 +14,8 @@ import { appRoot, findAppLayout, listStaged, readUpstreamConfig, stageDir } from
 import { artifactName } from './rebrand.mjs';
 import { packAppImage } from './pack-appimage.mjs';
 import { packSnap } from './pack-snap.mjs';
+import { packDeb } from './pack-deb.mjs';
+import { packRpm } from './pack-rpm.mjs';
 
 const staged = await listStaged();
 if (staged.length === 0) {
@@ -35,11 +37,14 @@ for (const key of staged) {
     execFileSync('tar', ['czf', out, '-C', stage, '.'], { stdio: 'inherit' });
     report(out);
 
-    // AppImage + snap are best-effort: skip (don't fail the repack) if the
-    // host lacks mksquashfs / can't fetch appimagetool. CI installs both.
+    // AppImage/snap/deb/rpm are all best-effort: skip (don't fail the repack)
+    // if the host lacks the matching tool (mksquashfs, appimagetool,
+    // dpkg-deb, rpmbuild). CI installs all four.
     if (key === 'linux-x64') {
       await tryPack('AppImage', () => packAppImage(stage, path.join(outDir, `${base}.AppImage`)));
       await tryPack('snap', () => packSnap(stage, path.join(outDir, `${base}.snap`)));
+      await tryPack('deb', () => packDeb(stage, path.join(outDir, `${base}_amd64.deb`)));
+      await tryPack('rpm', () => packRpm(stage, path.join(outDir, `${base}.x86_64.rpm`)));
     }
   } else {
     const out = path.join(outDir, `${base}.zip`);

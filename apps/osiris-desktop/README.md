@@ -21,11 +21,24 @@ themes + editor defaults) — into `resources/app/extensions/` as **built-ins**,
 `pnpm --filter "./extensions/*" package` is only needed explicitly in CI.
 
 `package` emits a portable archive per platform (`.tar.gz` on Linux, `.zip` on
-Windows/macOS) and, for `linux-x64` only, an **AppImage** and a classic
-confinement **snap** wrapping the same branded tree. The two extra Linux packages
-are best-effort — `package.mjs` warns and skips them if `mksquashfs`
-(`squashfs-tools`) is missing or `appimagetool` can't be fetched. Build one on
-its own with `node scripts/pack-appimage.mjs` / `node scripts/pack-snap.mjs`.
+Windows/macOS) and, for `linux-x64` only, an **AppImage**, a classic
+confinement **snap**, a **`.deb`** and an **`.rpm`** wrapping the same branded
+tree. All four extra Linux packages are best-effort — `package.mjs` warns and
+skips a given one if its tool is missing (`mksquashfs`/`appimagetool` for
+AppImage/snap, `dpkg-deb` for `.deb`, `rpmbuild` for `.rpm`). Build one on its
+own with `node scripts/pack-appimage.mjs` / `pack-snap.mjs` / `pack-deb.mjs` /
+`pack-rpm.mjs`.
+
+Unlike the AppImage/snap (self-contained, no host dependency declaration
+possible), the `.deb`/`.rpm` declare real package dependencies — see
+`RUNTIME_DEB_DEPENDS`/`RUNTIME_RPM_REQUIRES` and `DOCKER_DEB_ALTERNATIVES`/
+`DOCKER_RPM_ALTERNATIVES` in `pack-linux.mjs`. Per spec §6.7, Osiris always
+works through `kind`, and Docker (or Podman) is `kind`'s own runtime
+dependency — so the package itself must require it (`docker-ce | docker.io |
+podman-docker` on `.deb`, the RPM-rich-dependency equivalent on `.rpm`), not
+just document it. `kind`/`kubectl` are **not** declared this way — neither
+ships a package in any distro's or Docker's/Podman's own repos — `osiris
+doctor` has to detect those missing at runtime instead.
 
 | File / dir                   | Role                                                                |
 | ---------------------------- | ------------------------------------------------------------------- |
@@ -34,10 +47,12 @@ its own with `node scripts/pack-appimage.mjs` / `node scripts/pack-snap.mjs`.
 | `scripts/rebrand.mjs`        | pure transforms (product.json curation, launcher patching) — tested |
 | `scripts/apply-branding.mjs` | apply the rebrand to every staged platform                          |
 | `scripts/package.mjs`        | repack the branded tree into `dist_electron/`                       |
-| `scripts/pack-linux.mjs`     | pure text: `.desktop`, AppImage `AppRun`, snap `snap.yaml` — tested |
+| `scripts/pack-linux.mjs`     | pure text: `.desktop`, AppImage `AppRun`, snap `snap.yaml`, `.deb` control, `.rpm` spec — tested |
 | `scripts/pack-tree.mjs`      | lay out the shared wrapper root (`usr/share/osiris/` + icon)        |
 | `scripts/pack-appimage.mjs`  | wrap `linux-x64` → `.AppImage` (`appimagetool`, auto-downloaded)    |
 | `scripts/pack-snap.mjs`      | wrap `linux-x64` → `.snap` (`mksquashfs`, classic confinement)      |
+| `scripts/pack-deb.mjs`       | wrap `linux-x64` → `.deb` (`dpkg-deb`)                              |
+| `scripts/pack-rpm.mjs`       | wrap `linux-x64` → `.rpm` (`rpmbuild`, no-compile `--buildroot`)    |
 | `scripts/dev.mjs`            | launch this host's branded build straight from `.build/`            |
 | `runtime/`                   | Electron main-process hook (not wired into the rebrand yet)         |
 

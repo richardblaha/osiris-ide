@@ -6,7 +6,7 @@ on:
 
 permissions:
   contents: write
-  packages: write
+  packages: read
 
 jobs:
   extensions:
@@ -19,6 +19,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN }}
       - run: pnpm build
       - run: pnpm --filter "./extensions/*" package
       - uses: actions/upload-artifact@v4

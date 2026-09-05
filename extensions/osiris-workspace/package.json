@@ -226,8 +226,8 @@
   "dependencies": {
     "@osiris/container-sync": "workspace:*",
     "@osiris/lm-proxy": "workspace:*",
-    "@richardblaha/protocol": "workspace:*",
-    "@richardblaha/shared-core": "workspace:*"
+    "@richardblaha/protocol": "^0.1.0",
+    "@richardblaha/shared-core": "^0.1.0"
   },
   "devDependencies": {
     "@osiris/tsconfig": "workspace:*",

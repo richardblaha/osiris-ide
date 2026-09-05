@@ -140,3 +140,152 @@ export function snapLauncher() {
 ${envScrubPreamble()}exec "$SNAP/${APP_PREFIX}/bin/osiris" "$@"
 `;
 }
+
+/**
+ * `.deb` `postinst`: set the setuid bit on Electron's sandbox helper so
+ * `osiris` runs sandboxed out of the box. Unlike the AppImage (`appRunScript`
+ * detects a locked-down userns at launch and falls back to `--no-sandbox`)
+ * or the `.tar.gz` (README tells the user to `chmod` it by hand), a `.deb` is
+ * a real system install and can just fix the permission once, at install time.
+ */
+export function debPostinst() {
+  return `#!/bin/sh
+set -e
+chmod 4755 /${APP_PREFIX}/chrome-sandbox 2>/dev/null || true
+exit 0
+`;
+}
+
+/** Same fix as `debPostinst()`, as an RPM `%post` scriptlet body. */
+export function rpmPost() {
+  return `chmod 4755 /${APP_PREFIX}/chrome-sandbox 2>/dev/null || true\n`;
+}
+
+/**
+ * Shared library packages the branded VSCodium prebuilt needs from the host —
+ * Electron/Chromium is not fully self-contained the way the AppImage/snap
+ * wrappers are. Mirrors upstream VS Code's/VSCodium's own `.deb` dependency
+ * list; best-effort, revisit if upstream's Electron version moves the goalposts.
+ */
+export const RUNTIME_DEB_DEPENDS = [
+  'ca-certificates',
+  'git',
+  'libasound2',
+  'libgbm1',
+  'libgtk-3-0',
+  'libnotify4',
+  'libnspr4',
+  'libnss3',
+  'libsecret-1-0',
+  'libx11-xcb1',
+  'libxkbfile1',
+  'libxss1',
+  'libxtst6',
+  'xdg-utils',
+];
+
+/** Same runtime set, RPM package naming (Fedora/RHEL-family). */
+export const RUNTIME_RPM_REQUIRES = [
+  'alsa-lib',
+  'at-spi2-atk',
+  'git',
+  'gtk3',
+  'libnotify',
+  'libsecret',
+  'libX11-xcb',
+  'libxkbfile',
+  'libXScrnSaver',
+  'libXtst',
+  'mesa-libgbm',
+  'nspr',
+  'nss',
+  'xdg-utils',
+];
+
+/**
+ * Docker Engine alternatives for the `Depends`/`Requires` line — see spec
+ * §6.7: Osiris always works through `kind`, and Docker is purely `kind`'s own
+ * runtime dependency, but it still has to be an *installed* dependency of the
+ * Osiris package itself (kind needs a container engine present). `kind` and
+ * `kubectl` are deliberately NOT listed here: neither ships a package in any
+ * distro's default repos (or Docker's/Podman's own repos), so they can't be
+ * expressed as a package dependency — `osiris doctor` has to detect and
+ * report those missing at runtime instead.
+ */
+export const DOCKER_DEB_ALTERNATIVES = ['docker-ce', 'docker.io', 'podman-docker'];
+export const DOCKER_RPM_ALTERNATIVES = ['docker-ce', 'docker', 'moby-engine', 'podman-docker'];
+
+/**
+ * `DEBIAN/control` for the `.deb` wrapper.
+ *
+ * @param {object} opts
+ * @param {string} opts.version  upstream release string, e.g. `1.94.2.24286`
+ * @param {string} [opts.arch]   Debian architecture, default `amd64`
+ */
+export function debControl({ version, arch = 'amd64' }) {
+  const depends = [...RUNTIME_DEB_DEPENDS, DOCKER_DEB_ALTERNATIVES.join(' | ')].join(', ');
+  return `Package: osiris
+Version: ${version}
+Section: devel
+Priority: optional
+Architecture: ${arch}
+Maintainer: Osiris IDE <noreply@osiris.dev>
+Depends: ${depends}
+Homepage: https://github.com/osiris-ide/osiris
+Description: Osiris IDE — a rebranded VSCodium build
+ Osiris IDE is a rebrand of the VSCodium prebuilt: the same editor, with the
+ Osiris product identity, icons and Open VSX gallery. Requires a working
+ Docker (or Podman) install — Osiris always delegates project/session work to
+ a local kind Kubernetes cluster, and kind itself runs on top of Docker.
+`;
+}
+
+/**
+ * RPM `.spec` for the `.rpm` wrapper. Packages an already-built tree (no
+ * compile step): `%install` is a no-op and `_missing_build_ids_terminate_build`
+ * is disabled because the bundled Electron/Chromium binaries carry no ELF
+ * build-id, which recent `rpmbuild` otherwise treats as a fatal QA error.
+ *
+ * @param {object} opts
+ * @param {string} opts.version   upstream release string, e.g. `1.94.2.24286`
+ * @param {string} [opts.release] RPM release field, default `1`
+ * @param {string} [opts.arch]    RPM architecture, default `x86_64`
+ */
+export function rpmSpec({ version, release = '1', arch = 'x86_64' }) {
+  const requires = [...RUNTIME_RPM_REQUIRES, `(${DOCKER_RPM_ALTERNATIVES.join(' or ')})`]
+    .map((r) => `Requires: ${r}`)
+    .join('\n');
+  return `%global debug_package %{nil}
+%global __os_install_post %{nil}
+%global _missing_build_ids_terminate_build 0
+AutoReqProv: no
+
+Name: osiris
+Version: ${version}
+Release: ${release}
+Summary: Osiris IDE — a rebranded VSCodium build
+License: MIT
+URL: https://github.com/osiris-ide/osiris
+BuildArch: ${arch}
+${requires}
+
+%description
+Osiris IDE is a rebrand of the VSCodium prebuilt: the same editor, with the
+Osiris product identity, icons and Open VSX gallery. Requires a working
+Docker (or Podman) install -- Osiris always delegates project/session work to
+a local kind Kubernetes cluster, and kind itself runs on top of Docker.
+
+%install
+true
+
+%post
+${rpmPost()}
+%files
+/usr/bin/osiris
+/usr/share/osiris
+/usr/share/applications/osiris.desktop
+/usr/share/icons/hicolor/512x512/apps/osiris.png
+
+%changelog
+`;
+}

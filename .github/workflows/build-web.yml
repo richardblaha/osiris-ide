@@ -6,7 +6,7 @@ on:
 
 permissions:
   contents: read
-  packages: write
+  packages: read
 
 jobs:
   server-bundle:
@@ -24,6 +24,8 @@ jobs:
           sudo apt-get install -y libx11-dev libxkbfile-dev libsecret-1-dev libkrb5-dev
 
       - run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN }}
       - run: pnpm --filter @osiris/branding build
       - run: pnpm --filter @osiris/branding render:icons
       # First-party extensions are bundled into the REH server as built-ins by

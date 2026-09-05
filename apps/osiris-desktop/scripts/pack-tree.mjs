@@ -17,9 +17,14 @@ const generatedIcon = fileURLToPath(
  * @param {string} sourceTree  a branded VSCodium prebuilt tree (contains `osiris`,
  *                             `bin/osiris`, `resources/app/product.json`, …)
  * @param {string} root        the wrapper root to populate (created if missing)
+ * @param {object} [opts]
+ * @param {boolean} [opts.topLevelExtras]  also drop a `.desktop`/icon copy at
+ *   the root of the tree — required by AppImage/snap tooling, but unwanted
+ *   (stray files under `/`) in a `.deb`/`.rpm` payload, which only wants the
+ *   proper `usr/share/{applications,icons}/` locations. Default `true`.
  * @returns {Promise<{appDir: string, icon: string}>}
  */
-export async function buildWrapperRoot(sourceTree, root) {
+export async function buildWrapperRoot(sourceTree, root, { topLevelExtras = true } = {}) {
   if (!existsSync(path.join(sourceTree, 'resources', 'app', 'product.json'))) {
     throw new Error(`[osiris-desktop] ${sourceTree} is not a branded prebuilt tree`);
   }
@@ -31,15 +36,16 @@ export async function buildWrapperRoot(sourceTree, root) {
   await mkdir(appDir, { recursive: true });
   await cp(sourceTree, appDir, { recursive: true });
 
-  await writeFile(path.join(root, 'osiris.desktop'), desktopEntry());
+  if (topLevelExtras) await writeFile(path.join(root, 'osiris.desktop'), desktopEntry());
   await mkdir(path.join(root, 'usr', 'share', 'applications'), { recursive: true });
   await writeFile(path.join(root, 'usr', 'share', 'applications', 'osiris.desktop'), desktopEntry());
 
   const iconTarget = path.join(root, 'usr', 'share', 'icons', 'hicolor', '512x512', 'apps');
   await mkdir(iconTarget, { recursive: true });
   const icon = await readFile(generatedIcon);
-  await writeFile(path.join(iconTarget, 'osiris.png'), icon);
-  await writeFile(path.join(root, 'osiris.png'), icon);
+  const sharedIcon = path.join(iconTarget, 'osiris.png');
+  await writeFile(sharedIcon, icon);
+  if (topLevelExtras) await writeFile(path.join(root, 'osiris.png'), icon);
 
-  return { appDir, icon: path.join(root, 'osiris.png') };
+  return { appDir, icon: topLevelExtras ? path.join(root, 'osiris.png') : sharedIcon };
 }
